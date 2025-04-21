@@ -70,11 +70,14 @@ cos_sim = F.cosine_similarity(weights[0], weights[1], dim=1).to(t.float32).detac
 ortho_embeds = cos_sim[cos_sim < 0.1]
 
 fig = px.histogram(
-    x=ortho_embeds,
+    x=cos_sim,
     nbins=50,
     title='Cosine Similarity Distribution of Embedding Weights',
     labels={'x': 'Cosine Similarity', 'y': 'Frequency'}
 )
+# Set y-axis to logarithmic scale for better visualization of the distribution
+fig.update_layout(yaxis_type="log")
+
 fig.show()
 
 
@@ -83,6 +86,11 @@ fig.show()
 # So these are typically special tokens in the model, around 200 of them. Rest of the embeddings are identical.
 
 import unicodedata
+import numpy as np
+from rich import print as rprint
+from rich.table import Table
+
+
 # Get the indices where cosine similarity is less than 0.1
 ortho_indices = np.where(cos_sim < 0.1)[0]
 
@@ -128,18 +136,24 @@ distilled_tokens = [tokenizer_distilled.decode([idx]) for idx in ortho_indices]
 
 
 def compare_token_embeddings(indices, model_list, model_label_list, msg=""):
+    table = Table(title=msg)
+    table.add_column("Index", style="cyan")
+    for label in model_label_list:
+        table.add_column(label, style="magenta")
+
+    table.add_column("Similarity", style="green")
     tokenizers = [model.tokenizer for model in model_list]
     tokens = [
         [tokenizer.decode([idx]) for idx in indices]
         for tokenizer in tokenizers
     ]
-    print(msg)
     for i, idx in enumerate(indices):
-        print(
-            "".join(
-                [f"{i}. "] + [f"{label}: {tokens[i_model][i]} | " for i_model, label in enumerate(model_label_list)] + [f"Similarity: {cos_sim[idx]:.3f}"]
-            )
+        table.add_row(
+            f"{i}",
+            *[f"{tokens[i_model][i]}" for i_model in range(len(model_list))],
+            f"{cos_sim[idx]:.3f}"
         )
+    rprint(table)
     # TODO: create a table using rich
     pass
             
