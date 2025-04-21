@@ -38,6 +38,3 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
-
-# Initialization
-# init_git.sh
