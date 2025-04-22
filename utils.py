@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 import sys
 import inspect
+from nnsight import LanguageModel
+
+
 
 def print_memory_usage():
     # Dictionary to store memory by type
@@ -375,6 +378,9 @@ def shape_of(tensor):
         
     pass
 
+
+## Model Loading
+
 def import_modules_and_load_models(start_monitoring: bool = True):
     # These imports are already at the top of the file or will be moved there
     # The function will use these global imports instead of local ones
@@ -407,5 +413,69 @@ def import_modules_and_load_models(start_monitoring: bool = True):
         )
     
     return monitor, models
+
+
+## Retrieving weights
+def get_weights(
+    lm: LanguageModel,
+    lm_ft: LanguageModel,
+    act_name: str,
+    layers: int | list[int] | None,
+):
+    """Get the weights from the base and fine-tuned models for a given activation name and layers.
+    
+    Args:
+        lm (LanguageModel): Base language model
+        lm_ft (LanguageModel): Fine-tuned language model
+        act_name (str): Name of the activation to get weights from, e.g.:
+            - "mlp.gate_proj" for MLP gate projection weights
+            - "self_attn.q_proj" for attention query projection weights  
+            - "self_attn.k_proj" for attention key projection weights
+        layers (int | list[int]): Layer number(s) to get weights from
+        
+    Returns:
+        tuple[t.Tensor, t.Tensor]: Tuple containing:
+            - weights: Stacked weights from base model
+            - weights_ft: Stacked weights from fine-tuned model
+    """
+    if isinstance(layers, int):
+        layers = [layers]
+        
+    if layers is None:
+        # meaning that we are retrieving weights from embeddings/unembeddings, etc
+        act = lm.model
+        act_ft = lm_ft.model
+        
+        for attr in act_name.split("."):
+            act = getattr(act, attr)
+            act_ft = getattr(act_ft, attr)
+        
+        weights = act.weight.data
+        weights_ft = act_ft.weight.data
+        
+    else:
+        weights = []
+        weights_ft = []
+        for layer in layers:
+            act = lm.model.layers[layer]
+            act_ft = lm_ft.model.layers[layer]
+            
+            for attr in act_name.split("."):
+                act = getattr(act, attr)
+                act_ft = getattr(act_ft, attr)
+            
+            weights.append(act.weight.data)
+            weights_ft.append(act_ft.weight.data)
+        
+        weights = t.stack(weights)
+        weights_ft = t.stack(weights_ft)
+    
+    return weights, weights_ft
+
+
+
+
+
+
     
     

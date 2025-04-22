@@ -27,12 +27,33 @@ lm_ft = models[model_ft_name]
 
 layer_batch_size = 4
 
+
+########################################################
+# Deprecated, see utils.py for the updated version
+# include possible
+########################################################
 def get_weights(
     lm: LanguageModel,
     lm_ft: LanguageModel,
     act_name: str,
     layers: int | list[int],
 ):
+    """Get the weights from the base and fine-tuned models for a given activation name and layers.
+    
+    Args:
+        lm (LanguageModel): Base language model
+        lm_ft (LanguageModel): Fine-tuned language model
+        act_name (str): Name of the activation to get weights from, e.g.:
+            - "mlp.gate_proj" for MLP gate projection weights
+            - "self_attn.q_proj" for attention query projection weights  
+            - "self_attn.k_proj" for attention key projection weights
+        layers (int | list[int]): Layer number(s) to get weights from
+        
+    Returns:
+        tuple[t.Tensor, t.Tensor]: Tuple containing:
+            - weights: Stacked weights from base model
+            - weights_ft: Stacked weights from fine-tuned model
+    """
     if isinstance(layers, int):
         layers = [layers]
     
@@ -181,7 +202,7 @@ def compare_mlp_weights(
         plt.legend()
         plt.title(f"MLP Weight Difference Norms for {lm_base_name} and {lm_ft_name}")
         plt.xlabel("Layer")
-        plt.ylabel(r"$\|W - W'\|_F / ( \|W\|_F + \|W'\|_F )$")
+        plt.ylabel(r"$\|W - W'\|_F / ( \|W\|_F + \|W'\|_F )$" if metric == "frobenius" else r"$\mathrm{Tr}(W^T W') / (\|W\|_F \|W'\|_F)$")
     
     if save_plot:
         plt.savefig(f"{save_path}/diff_{metric}_{plot_name}.png", dpi=300)
@@ -191,7 +212,7 @@ def compare_mlp_weights(
 from tqdm import tqdm
 
 batch_processing_models = [
-    ("llama-3.1-8b", "llama-3.1-8b-r1-distilled", "mlp_llama_base_distilled"),
+    # ("llama-3.1-8b", "llama-3.1-8b-r1-distilled", "mlp_llama_base_distilled"),
     ("qwen-2.5-7b", "qwen-2.5-7b-math", "mlp_qwen_base_math"),
     ("qwen-2.5-7b", "qwen-2.5-7b-instruct", "mlp_qwen_base_inst"),
     ("qwen-2.5-7b-math", "qwen-2.5-7b-math-instruct", "mlp_qwen_math_mathinst"),
@@ -203,5 +224,6 @@ for lm_base_name, lm_ft_name, plot_name in tqdm(batch_processing_models):
         lm_ft_name=lm_ft_name,
         plot_name=plot_name,
         save_path="output/cossim",
+        save_plot=True,
         metric="cossim",
     )
