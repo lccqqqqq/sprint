@@ -372,5 +372,40 @@ def shape_of(tensor):
         print(f"Shape of [{var_name}]: {tensor.shape}")
     else:
         print(f"{var_name} has no shape attribute. Type: {type(tensor)}")
+        
+    pass
 
+def import_modules_and_load_models(start_monitoring: bool = True):
+    # These imports are already at the top of the file or will be moved there
+    # The function will use these global imports instead of local ones
+    import os
+    from nnsight import LanguageModel
+    if start_monitoring:
+        monitor = MemoryMonitor()
+        monitor.start()
+        monitor.start_continuous_monitoring()
+    
+    OUT_DIR = "output"
+    os.makedirs(OUT_DIR, exist_ok=True)
+    
+    model_names = {
+        "llama-3.1-8b-r1-distilled": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        "llama-3.1-8b": "meta-llama/Meta-Llama-3.1-8B",
+        "qwen-2.5-7b-math-instruct": "Qwen/Qwen2.5-Math-7B-Instruct",
+        "qwen-2.5-7b-instruct": "Qwen/Qwen2.5-7B-Instruct",
+        "qwen-2.5-7b-math": "Qwen/Qwen2.5-Math-7B",
+        "qwen-2.5-7b": "Qwen/Qwen2.5-7B",
+    }
+
+    models = {}
+    for model_name in model_names:
+        models[model_name] = LanguageModel(
+            model_names[model_name],
+            device_map="cpu",
+            dispatch=True,
+            torch_dtype=t.bfloat16
+        )
+    
+    return monitor, models
+    
     

@@ -166,16 +166,21 @@ def get_attn_weight_diff_ov(
     ).diagonal(dim1=-2, dim2=-1).sum(dim=-1)
     
     # Calculate weight norm for normalization
-    weight_norm = ((
+    
+    # check the norms
+    weight_norm_1 = (
         diag_terms[0]["vv"] @ diag_terms[0]["oo"]
-    ).diagonal(dim1=-2, dim2=-1).sum(dim=-1) + (
+    ).diagonal(dim1=-2, dim2=-1).sum(dim=-1)
+    weight_norm_2 = (
         diag_terms[1]["vv"] @ diag_terms[1]["oo"]
-    ).diagonal(dim1=-2, dim2=-1).sum(dim=-1))
+    ).diagonal(dim1=-2, dim2=-1).sum(dim=-1)
+    
+    weight_norm = weight_norm_1 + weight_norm_2
     
     # Calculate relative weight difference
     rel_weight_diff = weight_diff / weight_norm
     
-    return rel_weight_diff, diag_terms, off_diag_terms
+    return rel_weight_diff, diag_terms, off_diag_terms, weight_norm_1, weight_norm_2
 
 # %% Generic function for comparing model attn weights
 def compare_attn_weights(
@@ -201,7 +206,7 @@ def compare_attn_weights(
     if attn_type == "qk":
         rel_weight_diff, diag_terms, off_diag_terms = get_attn_weight_diff_qk(attn_base, attn_ft)
     elif attn_type == "ov":
-        rel_weight_diff, diag_terms, off_diag_terms = get_attn_weight_diff_ov(attn_base, attn_ft)
+        rel_weight_diff, diag_terms, off_diag_terms, weight_norm_1, weight_norm_2 = get_attn_weight_diff_ov(attn_base, attn_ft)
     else:
         raise ValueError(f"Invalid attn_type: {attn_type}")
 
@@ -223,12 +228,12 @@ def compare_attn_weights(
             else:
                 plt.savefig(os.path.join(save_dir, save_name))
     
-    return rel_weight_diff, diag_terms, off_diag_terms
+    return rel_weight_diff, diag_terms, off_diag_terms, weight_norm_1, weight_norm_2
 
 
 # %% Experimenting with qwen
 
-rel_weight_diff, diag_terms, off_diag_terms = compare_attn_weights(
+rel_weight_diff, diag_terms, off_diag_terms, weight_norm_1, weight_norm_2 = compare_attn_weights(
     "qwen-2.5-7b",
     "qwen-2.5-7b-math",
     attn_type="ov",
