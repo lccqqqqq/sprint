@@ -92,11 +92,13 @@ for lm_base_name, lm_ft_name, plot_name in tqdm(batch_processing_models):
 def compare_relative_embedding_difference(
     lm_base_name: str,
     lm_ft_name: str,
-    metric: str = "cossim",
+    n_samples: int = 1000,
+    n_bins: int = 50,
     plot_hist: bool = True,
     save_plot: bool = False,
     save_path: str = "output/rel_embed",
     plot_name: str = "",
+    seed: int | None = None,
 ):
     if save_plot:
         os.makedirs(save_path, exist_ok=True)
@@ -105,7 +107,59 @@ def compare_relative_embedding_difference(
         models[lm_base_name], models[lm_ft_name], "embed_tokens", None
     )
     
+    # pick a random token
+    if seed is not None:
+        t.manual_seed(seed)
     
+    random_token = t.randint(0, emb.shape[0], (n_samples, 2))
+    
+    # compute the embedding differences in base model
+    emb_diff_base = (emb[random_token[:, 0]] - emb[random_token[:, 1]]).norm(p="fro", dim=1)
+    
+    # compute the embedding differences in fine-tuned model
+    emb_diff_ft = (emb_ft[random_token[:, 0]] - emb_ft[random_token[:, 1]]).norm(p="fro", dim=1)
+    
+    # checking whether the *magnitudes* of differences are similar
+    norm_diff = t.abs(emb_diff_base - emb_diff_ft) / (t.abs(emb_diff_base) + t.abs(emb_diff_ft) + 1e-5)
+    
+    if plot_hist:
+        fig = px.histogram(
+            x=norm_diff.to(t.float32).cpu().numpy(),
+            nbins=n_bins,
+            title=f"{lm_base_name} and {lm_ft_name} by relative embedding difference",
+            labels={'x': 'Difference in embedding magnitudes', 'y': 'Frequency'}
+        )
+        fig.show()
+        
+        if save_plot:
+            fig.write_image(f"{save_path}/diff_{plot_name}.png")
+    
+    return norm_diff
+
+
+#%%
+
+norm_diff = compare_relative_embedding_difference(
+    lm_base_name="qwen-2.5-7b",
+    lm_ft_name="qwen-2.5-7b-math",
+    n_samples=30000,
+    n_bins=200,
+    plot_hist=True,
+    save_plot=True,
+    plot_name="qwen_base_math",
+    save_path="output/rel_embed",
+    seed=4,
+)
+
+
+
+
+
+
+
+
+
+
     
     
 
