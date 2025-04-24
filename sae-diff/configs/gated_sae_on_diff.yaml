@@ -1,0 +1,75 @@
+# Model configurations, names and paths
+seed: 42
+
+model_base:
+  name: "llama-3.1-8b"
+  path: "meta-llama/Meta-Llama-3.1-8B"
+
+model_ft:
+  name: "llama-3.1-8b-r1-distilled"
+  path: "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+  
+save_dir: "workspace/sae-diff/output"
+save_checkpoint_freq: 1000
+
+
+trainer:
+  num_tokens_to_train: 400_000_000
+  virtual_batch_size: 8192 # batch size per optimizer step
+  actual_batch_size: 256 # batch size per forward pass
+  tokens_per_example: 1024
+  skip_first_n_tokens: 1
+
+  # To be computed from above at runtime
+  accumulation_steps: 32
+  num_optimizer_steps: 48828
+  total_forward_passes: 1562496
+
+  # Gated SAE training
+  sparsity_loss_alpha: 0.03125
+
+# training loop, optimizer and scheduler
+optimizer:
+  name: "adamw"
+  lr: 1e-4
+  weight_decay: 0.01
+  beta1: 0.0
+  beta2: 0.999
+
+scheduler:
+  name: "constant"
+  warmup_steps: 1000
+
+resample:
+  freq: 2500 # num of optim steps between resampling
+  window: 800 # num of optim steps to classify dead latents
+  scale: 0.5 # how much to rescale the weights of dead latents
+
+# Data generator
+generator:
+  dataset:
+    name: "ServiceNow-AI/R1-Distill-SFT"
+    split: "train"
+    streaming: false
+  layer_num: 0
+  activation_batch_size: 256 # same as actual batch size
+  generator_batch_size: 24
+  acts_per_run: 1_000_000
+  tokens_per_example: 1024
+  skip_first_n_tokens: 1
+  device: "cuda"
+
+wandb:
+  use_wandb: true
+  project: "sae-diff"
+  name: "gated-sae-on-diff" # same as file name
+
+sae:
+  sparsity_coeff: 0.03125
+  aux_coeff: 0.03125
+  d_model: 4096
+  d_sae: 65536
+  weight_normalize_eps: 1e-6
+
+
+
