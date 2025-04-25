@@ -611,18 +611,25 @@ def compute_metrics(activations, features, reconstructions):
 
 if __name__ == "__main__":
     from datasets import load_dataset
-    base_model = LanguageModel("meta-llama/Meta-Llama-3.1-8B", device_map="cuda", dispatch=True, torch_dtype=torch.bfloat16)
-    finetune_model = LanguageModel("deepseek-ai/DeepSeek-R1-Distill-Llama-8B", device_map="cuda", dispatch=True, torch_dtype=torch.bfloat16)
-    base_tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B")
-    finetune_tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Llama-8B")
-
-    dataset = load_dataset(
-        "ServiceNow-AI/R1-Distill-SFT",
-        "v1",
-        split="train",
-        streaming=False,
-    )
-    dataset = dataset.shuffle(seed=42)
+    from memory_util import MemoryMonitor
+    monitor = MemoryMonitor()
+    monitor.start()
+    for i in range(3):
+        base_model = LanguageModel("meta-llama/Meta-Llama-3.1-8B", device_map="cuda", dispatch=True, torch_dtype=torch.bfloat16)
+        finetune_model = LanguageModel("deepseek-ai/DeepSeek-R1-Distill-Llama-8B", device_map="cuda", dispatch=True, torch_dtype=torch.bfloat16)
+        base_tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B")
+        finetune_tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Llama-8B")
+        monitor.measure(f"Loaded models, iteration {i}")
+        
+        dataset = load_dataset(
+            "ServiceNow-AI/R1-Distill-SFT",
+            "v1",
+            split="train",
+            streaming=False,
+        )
+        monitor.measure(f"Loaded dataset, iteration {i}")
+        dataset = dataset.shuffle(seed=42)
+        monitor.measure(f"Shuffled dataset, iteration {i}")
 
     # data_generator = cached_activation_generator(
     #     base_model, # llama-3.1-8b
@@ -652,16 +659,20 @@ if __name__ == "__main__":
         skip_first_n_tokens=1,
         device="cuda"
     )
-
+    monitor.measure("Created data generator")
     import time
     from tqdm import tqdm
     t0 = time.time()
     for i in tqdm(range(20)):
         test_dataset = next(data_generator)
-        print(test_dataset.shape)
+        # print(test_dataset.shape)
+        monitor.measure(f"Generated data iteration {i}")
+    
     t1 = time.time()
     print(f"Time taken: {t1 - t0} seconds")
-
+    monitor.report()
+    monitor.plot()
+    # monitor.stop()
 
 
 

@@ -1,7 +1,7 @@
 #%%
 import os 
 import sys
-os.chdir("/workspace/sae-diff/src")
+os.chdir("/workspace/sprint/sae-diff/src")
 import torch as t
 from torch.utils.data import DataLoader
 from torch.optim import Adam, AdamW
@@ -18,6 +18,7 @@ from datasets import load_dataset
 from memory_util import print_gpu_memory, MemoryMonitor
 from transformers import get_constant_schedule_with_warmup
 import wandb
+import gc
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """
@@ -44,7 +45,14 @@ def load_config(config_path: str) -> Dict[str, Any]:
 # monitor.start()
 # monitor.start_continuous_monitoring()
 
-def train(cfg: Dict[str, Any], use_monitor: bool = False):
+def train(cfg: Dict[str, Any] | None = None, use_monitor: bool = False):
+    
+    # for the sweep, wandb takes care of the config
+    init_wandb_flag = False
+    if cfg is None:
+        run = wandb.init()
+        cfg = wandb.config
+        init_wandb_flag = True
     
     ### 0. --- Setup ---
     t.manual_seed(cfg["seed"])
@@ -135,13 +143,17 @@ def train(cfg: Dict[str, Any], use_monitor: bool = False):
 
     print("Scheduler and optimizer setup complete")
     ### 3. --- Setup logger ---
-    wcfg = cfg["wandb"]
-    if wcfg["use_wandb"]:
-        run = wandb.init(
-            project=wcfg["project"],
-            name=wcfg["name"] # dependent on the config file name
-        )
-    
+    if not init_wandb_flag:
+        wcfg = cfg["wandb"]
+        if wcfg["use_wandb"]:
+            run = wandb.init(
+                project=wcfg["project"],
+                name=wcfg["name"] # dependent on the config file name
+            )
+        init_wandb_flag = True
+    else:
+        run = None
+        
     ### 4. --- Training setup ---
     tcfg = cfg["trainer"]
     virtual_batch_size = int(tcfg["virtual_batch_size"])
@@ -181,6 +193,7 @@ def train(cfg: Dict[str, Any], use_monitor: bool = False):
     
     for optimizer_step in pbar:
         optimizer.zero_grad()
+        
         if use_monitor:
             if (optimizer_step+1) % 64 == 0:
                 monitor.measure(label= f"Step {optimizer_step+1}", print_msg=True)
@@ -222,6 +235,7 @@ def train(cfg: Dict[str, Any], use_monitor: bool = False):
             # print(loss.shape) -> result: [64] == batch size
             loss.mean().backward()
             
+            
             if acc_step == 0:
                 # at each optimizer step, log the result
                 # display the progress bar
@@ -247,7 +261,7 @@ def train(cfg: Dict[str, Any], use_monitor: bool = False):
                             "aux_loss": loss_dict["L_aux"].mean(0).sum().item(),
                             "sparsity_loss": loss_dict["L_sparsity"].mean(0).sum().item(),
                             "loss": loss.mean(0).sum().item(),
-                            "fvu": fvu,
+                            "fvu": fvu.detach().cpu().item(),
                             "dead_latents": frac_active.sum().item(),
                             "memory_usage": monitor.measurements[-1][1]
                         }
@@ -260,7 +274,8 @@ def train(cfg: Dict[str, Any], use_monitor: bool = False):
                         fvu=fvu
                     )
                     run.log(run_data)
-                    
+
+
         optimizer.step()
         scheduler.step()
 
@@ -268,6 +283,11 @@ def train(cfg: Dict[str, Any], use_monitor: bool = False):
             os.makedirs(cfg["save_dir"], exist_ok=True)
             sae_path = os.path.join(cfg["save_dir"], f"sae_checkpoint_{optimizer_step}.pt")
             t.save(sae.state_dict(), sae_path)
+            
+            # release memory
+            # not every step because it takes extra time to run gc.collect()
+            t.cuda.empty_cache()
+            gc.collect()
 
         # Implement resampling after each time a threshold is crossed
         if (optimizer_step + 1) % cfg["resample"]["freq"] == 0:
@@ -279,25 +299,41 @@ def train(cfg: Dict[str, Any], use_monitor: bool = False):
             sae.resampling(batch_data, frac_active_in_window, cfg["resample"]["scale"])
             if use_monitor:
                 monitor.measure(f"After resampling {optimizer_step}")
+                
+            
+        
+        del batch_data, acts_post, diff_stdized, diff_reconstructed, scale_cache
         
 
     run.finish()
+    
+    
+    # finishing up
+    print("Training finished")
+    # release memory used by the models
+    del base_model, finetune_model, base_tokenizer, finetune_tokenizer
+    del train_data_generator
+    t.cuda.empty_cache()
+    t.cuda.reset_peak_memory_stats()
+    gc.collect()
+    
     if use_monitor:
         monitor.report()
         return monitor
-            
+    
 
 # if __name__ == "__main__":
 # monitor = MemoryMonitor()
 # monitor.start()
 # monitor.start_continuous_monitoring()
-cfg = load_config("/workspace/sae-diff/configs/gated_sae_toy.yaml")
-monitor = train(cfg, use_monitor=True)
+#%%
 
-#%% 
+# if __name__ == "__main__":
+for i in range(5):
+    os.chdir("/workspace/sprint/sae-diff")
+    cfg = load_config(f"configs/toy/sweep_toy_{i}.yaml")
+    monitor = train(cfg=cfg, use_monitor=True)
 
-# Analyze memory monitor
-import matplotlib.pyplot as plt
 monitor.plot()
 
     
@@ -318,3 +354,4 @@ monitor.plot()
     
     
     
+# %%

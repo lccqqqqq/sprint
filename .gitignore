@@ -38,3 +38,8 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# output files
+*.pt
+output/
+wandb/

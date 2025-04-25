@@ -46,6 +46,9 @@ class GatedDiffSAE(nn.Module):
         nn.init.kaiming_uniform_(self.W_gate)
         nn.init.kaiming_uniform_(self.W_dec)
         # the biases are already initialized to zero
+        # implement normalization of decoder weights
+        with t.no_grad():
+            self.W_dec.data = F.normalize(self.W_dec.data, dim=1)
 
     @property
     def W_mag(self) -> Float[Tensor, "d_model d_sae"]:
